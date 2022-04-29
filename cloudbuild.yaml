@@ -1,27 +1,51 @@
 steps:
   - id: "dev branch"
-    name: 'hashicorp/terraform:1.0.0'
-    env:
-    - 'BRANCH=$(git rev-parse --abbrev-ref HEAD)'
+    name: 'gcr.io/cloud-builders/gcloud'
     entrypoint: 'sh'
     args:
       - '-c'
       - |
-          echo $BRANCH
+          echo $BRANCH_NAME
           pwd
           cd demo
           ls
-         
-          if [ "$BRANCH" == "master"  ]; then
-            cd demo/$BRANCH_NAME
+          gcloud source repos clone environments --project=qwiklabs-gcp-03-c82e8bca1336
+          ls environments
+          
+  - id: "build"
+    name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'sh'
+    args:
+      - '-c'
+      - |
+          if [ "$BRANCH_NAME" = "master"  ]; then
+            cd environments/$BRANCH_NAME
             docker build -t demo:0.0.1 .
-            docker tag demo:0.0.1 gcr.io/qwiklabs-gcp-01-dc9e9c930753/demo:0.0.1
-            docker push gcr.io/qwiklabs-gcp-01-dc9e9c930753/demo:0.0.1
-            gcloud run deploy dev-demo --image gcr.io/qwiklabs-gcp-01-dc9e9c930753/demo:0.0.1 --platform managed --region us-central1 --allow-unauthenticated --port 8000
+            docker tag demo:0.0.1 gcr.io/qwiklabs-gcp-03-c82e8bca1336/demo:0.0.1
+            docker push gcr.io/qwiklabs-gcp-03-c82e8bca1336/demo:0.0.1
+          
+          elif [ "$BRANCH_NAME" = "dev"  ]; then
+            cd environments/$BRANCH_NAME
+            docker build -t demo_dev:0.0.1 .
+            docker tag demo_dev:0.0.1 gcr.io/qwiklabs-gcp-03-c82e8bca1336/demo_dev:0.0.1
+            docker push gcr.io/qwiklabs-gcp-03-c82e8bca1336/demo_dev:0.0.1
+
           fi
 
-  - id: "prod branch"
-    name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-t', 'gcr.io/qwiklabs-gcp-04-c23dcfc9e2fc/multi-br:0.0.1', 'dev/.']
+  - id: "deploy"
+    name: 'gcr.io/cloud-builders/gcloud'
+    #args: ['run', 'deploy','dev-demo','--image', 'gcr.io/qwiklabs-gcp-03-c82e8bca1336/demo:0.0.1','--port', '8000', '--allow-unauthenticated', '--region', 'us-central1']
   #- name: 'gcr.io/cloud-builders/docker'
   #  args: ['push', 'gcr.io/qwiklabs-gcp-04-c23dcfc9e2fc/multi-br:0.0.1']
+    entrypoint: 'sh'
+    args:
+      - '-c'
+      - |
+          if [ "$BRANCH_NAME" = "master"  ]; then
+            gcloud run deploy demo-prod --image gcr.io/qwiklabs-gcp-03-c82e8bca1336/demo:0.0.1 --port 8000 --allow-unauthenticated --region us-central1
+
+          elif [ "$BRANCH_NAME" = "dev"  ]; then
+            gcloud run deploy demo-dev --image gcr.io/qwiklabs-gcp-03-c82e8bca1336/demo_dev:0.0.1 --port 8000 --allow-unauthenticated --region us-central1
+
+          fi
+
